@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 import shutil
 from typing import Annotated, AsyncGenerator, Literal
+from pydub import AudioSegment
 
 import httpx
 import ormsgpack
@@ -13,6 +14,19 @@ from pydantic import AfterValidator, BaseModel, conint
 load_dotenv(".env")
 api_key = os.getenv("DEEPSEEK_API_KEY")
 fish_api_key = os.getenv("FISH_API_KEY")
+
+def merge_audio_files(file_paths, output_path):
+    # 创建一个空的AudioSegment对象作为容器
+    combined = AudioSegment.empty()
+    
+    # 遍历文件列表，将每个文件加载为AudioSegment对象，并添加到combined中
+    for file_path in file_paths:
+        audio = AudioSegment.from_file(file_path, format="m4a")
+        combined += audio
+    
+    # 导出合并后的音频文件
+    combined.export(output_path, format="m4a")
+
 class ServeReferenceAudio(BaseModel):
     audio: bytes
     text: str
@@ -30,31 +44,43 @@ class ServeTTSRequest(BaseModel):
     normalize: bool = True
 
 def write_wave(atext,path):
-    request = ServeTTSRequest(
-        text=atext,
-        references=[
-            ServeReferenceAudio(
-                audio=open("dingzhen.mp3", "rb").read(),
-                text="如果这个世界都充满欢乐，那该多好啊！",
-            )
-        ],
-    )
-    with (
-        httpx.Client() as client,
-        open(path, "wb") as f,
-    ):
-        with client.stream(
-            "POST",
-            "https://api.fish.audio/v1/tts",
-            content=ormsgpack.packb(request, option=ormsgpack.OPT_SERIALIZE_PYDANTIC),
-            headers={
-                "api-key": fish_api_key,
-                "content-type": "application/msgpack",
-            },
-            timeout=None,
-        ) as response:
-            for chunk in response.iter_bytes():
-                f.write(chunk)
+    filename=path.split(".")[0]
+    ext = path.split(".")[-1]
+    mytexts = atext.split("\n")
+    i=0
+    parts =  []
+    for mytext in mytexts:
+        i=i+1
+        parts.append(f"{filename}_{i}.{ext}")
+        if (len(mytext)<2):
+            continue
+        request = ServeTTSRequest(
+            text=mytext,
+            references=[
+                ServeReferenceAudio(
+                    audio=open("dingzhen.mp3", "rb").read(),
+                    text="如果这个世界都充满欢乐，那该多好啊！",
+                )
+            ],
+        )
+        
+        with (
+            httpx.Client() as client,
+            open(f"{filename}_{i}.{ext}", "wb") as f,
+        ):
+            with client.stream(
+                "POST",
+                "https://api.fish.audio/v1/tts",
+                content=ormsgpack.packb(request, option=ormsgpack.OPT_SERIALIZE_PYDANTIC),
+                headers={
+                    "api-key": fish_api_key,
+                    "content-type": "application/msgpack",
+                },
+                timeout=None,
+            ) as response:
+                for chunk in response.iter_bytes():
+                    f.write(chunk)
+    merge_audio_files(parts, path)
 def second_generate(text):
     client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com/beta")
     prompt = '''
@@ -125,6 +151,7 @@ def gen_transcript(filename):
     text = second_generate(text)
     with open(f"second_modify/{file_id}.txt", "w",encoding='utf-8') as f:
         f.write(text)
+    print("generating voice.")
     write_wave(text,output_wav_path)
     if not os.path.exists("audio_files_done"):
         os.makedirs("audio_files_done")
