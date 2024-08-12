@@ -14,18 +14,15 @@ from pydantic import AfterValidator, BaseModel, conint
 load_dotenv(".env")
 api_key = os.getenv("DEEPSEEK_API_KEY")
 fish_api_key = os.getenv("FISH_API_KEY")
+import subprocess
 
-def merge_audio_files(file_paths, output_path):
-    # 创建一个空的AudioSegment对象作为容器
-    combined = AudioSegment.empty()
-    
-    # 遍历文件列表，将每个文件加载为AudioSegment对象，并添加到combined中
-    for file_path in file_paths:
-        audio = AudioSegment.from_file(file_path, format="m4a")
-        combined += audio
-    
-    # 导出合并后的音频文件
-    combined.export(output_path, format="m4a")
+def merge_audio_files(input_files, output_file):
+    input_args = ""
+    outfile = output_file.split(".")[0]+".mp3"
+    for file in input_files:
+        input_args += f"-i {file} "
+    command = f"ffmpeg {input_args} -filter_complex concat=n={len(input_files)}:v=0:a=1 -f mp3 {outfile}"
+    subprocess.run(command, shell=True)
 
 class ServeReferenceAudio(BaseModel):
     audio: bytes
@@ -50,10 +47,12 @@ def write_wave(atext,path):
     i=0
     parts =  []
     for mytext in mytexts:
+        print(mytext)
         i=i+1
-        parts.append(f"{filename}_{i}.{ext}")
         if (len(mytext)<2):
             continue
+        parts.append(f"{filename}_{i}.{ext}")
+
         request = ServeTTSRequest(
             text=mytext,
             references=[
@@ -79,7 +78,7 @@ def write_wave(atext,path):
                 timeout=None,
             ) as response:
                 for chunk in response.iter_bytes():
-                    f.write(chunk)
+                    f.write(chunk) 
     merge_audio_files(parts, path)
 def second_generate(text):
     client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com/beta")
@@ -162,6 +161,11 @@ def process_files_in_dir(directory):
         path = os.path.join(directory, filename)
         if os.path.isfile(path):
             gen_transcript(filename)
+
+def wav_files_in_dir(path):
+    with open(path, "r",encoding='utf-8') as f:
+        text=f.read()
+    write_wave(text,"read_output\\A-UV7Z13uAQ.m4a")
 
 directory_path = 'audio_files'
 process_files_in_dir(directory_path)
