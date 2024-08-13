@@ -57,8 +57,12 @@ def write_wave(atext,path):
             text=mytext,
             references=[
                 ServeReferenceAudio(
-                    audio=open("dingzhen.mp3", "rb").read(),
-                    text="如果这个世界都充满欢乐，那该多好啊！",
+                    #audio=open("dingzhen.mp3", "rb").read(),
+                    #text="如果这个世界都充满欢乐，那该多好啊！",
+                    #audio=open("xuejie.mp3", "rb").read(),
+                    #text="我们致力于帮助以色列自卫，但同时，我们继续通过外交努力防止这场冲突的重大升级。",
+                    audio=open("output.wav", "rb").read(),
+                    text="冥想对于很多不熟悉它的人来说是一种近乎于玄学的神秘存在，但随着现代社会节奏加快和信息大爆炸，人们每天被巨大压力和焦虑裹挟",
                 )
             ],
         )
@@ -83,11 +87,12 @@ def write_wave(atext,path):
 def second_generate(text):
     client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com/beta")
     prompt = '''
-请根据用户给出的信息，运用以下技巧对内容进行二次创作：
+请根据用户给出的信息，运用以下技巧对内容进行二次创作,请用中文输出结果：
 - **句型与词汇调整**：通过替换原文中的句子结构和词汇以传达同样的思想。
 - **内容拓展与插入**：增添背景知识、实例和历史事件，以丰富文章内容，并降低关键词密度。
 - **避免关键词使用**：避免使用原文中的明显关键词或用其它词汇替换。
 - **结构与逻辑调整**：重新排列文章的结构和逻辑流程，确保与原文的相似度降低。
+- **语言翻译**：请翻译成中文。
 '''
     response = client.chat.completions.create(
         model="deepseek-chat",
@@ -144,7 +149,7 @@ def gen_transcript(filename):
         merge_length_s=15,
     )
     text = rich_transcription_postprocess(res[0]["text"])
-    text = format_transcript(text)
+    text = format_transcript(text).rstrip("\n")
     with open(f"transcript/{file_id}.txt", "w",encoding='utf-8') as f:
         f.write(text)
     text = second_generate(text)
